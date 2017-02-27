@@ -80,16 +80,16 @@ void setup() {
   Serial1.write(1);
   delay(500);
 
-  // set up cloud functions:
+  // Set up cloud functions:
   Particle.function("setTemp", SetTemperature);
 
-  // master switch on:
+  // Master relay on:
   digitalWrite(PIN_MASTER_RELAY, HIGH);
 }
 
 
 void loop() {
-  // connect to the cloud if not already:
+  // Connect to the cloud if not already:
   if (!Particle.connected())
     Particle.connect();
 
@@ -106,7 +106,7 @@ void loop() {
     if (!furnaceOn &&
       mainTemp_degF <= setPoint_degF - TEMP_BAND_DEG_F)
     {
-      // should turn heat on
+      // Should turn heat on, but with a delay
       if (!heaterRequest)
       {
         heaterRequest = true;
@@ -114,26 +114,31 @@ void loop() {
       }
       else if (millis() - lastHeatRequestTime_ms > HEAT_REQUEST_DELAY_MS)
       {
-        // We've waited required request delay, now command the furnace
-        //  to turn on, but only if we've waited the minimum OFF time
-        //  between cycles.
-        furnaceOn = (millis() - lastFurnaceOnTime_ms > MIN_OFF_TIME_MS);
+        // We've waited required request delay, now command the furnace to turn
+        //  on, but only if we've waited the minimum OFF time between cycles.
+        if (millis() - lastFurnaceOnTime_ms > MIN_OFF_TIME_MS)
+          furnaceOn = true;
       }
     }
     else if (mainTemp_degF >= setPoint_degF + TEMP_BAND_DEG_F)
     {
       if (millis() - lastFurnaceOffTime_ms > MIN_ON_TIME_MS)
         furnaceOn = false;
-
+    }
+    else
+    {
+      heaterRequest = false;
     }
   }
   else // heatMode == false
   {
+    heaterRequest = false;
+    // Turn off the furnace
     if (millis() - lastFurnaceOffTime_ms > MIN_ON_TIME_MS)
       furnaceOn = false;
   }
 
-  // safety check:
+  // Safety check:
   if (mainTemp_degF > 85 || auxTemp_degF > 90)
   {
     // TO DO: Throw the master switch
@@ -141,11 +146,9 @@ void loop() {
     furnaceOn = false;
   }
 
-
   // Control furnace relay:
   if (furnaceOn)
   {
-    // turn on the furnace relay
     digitalWrite(PIN_HEAT_RELAY, HIGH);
     lastFurnaceOnTime_ms = millis();
   }
