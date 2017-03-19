@@ -46,6 +46,7 @@ bool heaterRequest = false;
 bool furnaceOn = false;
 int setPoint_degF = 65;
 
+bool shouldUpdateDisplay = true;
 bool backlightOn = false;
 
 // temperature readings:
@@ -98,11 +99,15 @@ void loop() {
   if (!Particle.connected())
     Particle.connect();
 
-  // Read the sensors:
+  // Read the sensors every so often:
   if (millis() - lastReadSensorsTime_ms > 5000)
-  {
     ReadSensors();
+
+  // Update the displayed values if needed:
+  if (shouldUpdateDisplay)
+  {
     UpdateDisplay();
+    shouldUpdateDisplay = false;
   }
 
   // Control backlight brightness:
@@ -193,6 +198,9 @@ void ReadSensors(void)
   // light sensor resistance range = 1k~10kohm, and is in series with a 2.2 kohm resistor.
   //lightSensor = lightSensorVolts;
   //lightSensor = (lightSensorVolts - 0.595F) / (2.269F - 0.595F);
+
+  // flag an LCD display update:
+  shouldUpdateDisplay = true;
 }
 
 // brightness must be an int between 128 (off) and 157 (full on).
@@ -256,7 +264,7 @@ void ModeButton(void)
   if (millis() - timeOfLastInt > 250)
   {
     heatMode = !heatMode;
-    UpdateDisplay();
+    shouldUpdateDisplay = true;
   }
   timeOfLastInt = millis();
   lastButtonPressTime_ms = millis();
@@ -271,7 +279,7 @@ void TempUpButton(void)
     if (setPoint_degF < 90)
         ++setPoint_degF;
 
-    UpdateDisplay();
+    shouldUpdateDisplay = true;
   }
   timeOfLastInt = millis();
   lastButtonPressTime_ms = millis();
@@ -286,7 +294,7 @@ void TempDownButton(void)
     if (setPoint_degF > 50)
         --setPoint_degF;
 
-    UpdateDisplay();
+    shouldUpdateDisplay = true;
   }
   timeOfLastInt = millis();
   lastButtonPressTime_ms = millis();
