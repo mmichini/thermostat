@@ -20,10 +20,10 @@
 
 #define PIN_MASTER_RELAY    D3
 #define PIN_HEAT_RELAY      D4
-#define PIN_COOL_RELAY      D5
-#define PIN_FAN_RELAY       D6
+//#define PIN_COOL_RELAY      D5
+//#define PIN_FAN_RELAY       D6
 
-#define PIN_BLUE_LED   D7
+//#define PIN_BLUE_LED   D7
 
 // Heating mode constants:
 #define TEMP_BAND_DEG_F       1     // hysteresis band for set point temperature
@@ -31,17 +31,22 @@
 #define MIN_ON_TIME_MS        20000 // minimum time to keep heater on
 #define MIN_OFF_TIME_MS       20000 // minimum time heater must remain off between cycles.
 
+#define LCD_BACKLIGHT_TIMEOUT_MS 5000
+
 // timing:
 unsigned long lastHeatRequestTime_ms = 0;
 unsigned long lastReadSensorsTime_ms = 0;
 unsigned long lastFurnaceOnTime_ms = 0;
 unsigned long lastFurnaceOffTime_ms = 0;
+unsigned long lastButtonPressTime_ms = 0;
 
 // Heating mode variables:
 bool heatMode = false;
 bool heaterRequest = false;
 bool furnaceOn = false;
-int setPoint_degF = 70;
+int setPoint_degF = 65;
+
+bool backlightOn = false;
 
 // temperature readings:
 int mainTemp_mDegC = 0;
@@ -56,10 +61,10 @@ void setup() {
   pinMode(PIN_MODE_BTN, INPUT_PULLDOWN);
   pinMode(PIN_TEMP_UP_BTN, INPUT_PULLDOWN);
   pinMode(PIN_TEMP_DOWN_BTN, INPUT_PULLDOWN);
+  pinMode(PIN_FAN_BTN, INPUT_PULLDOWN);
   // Relay outputs:
   pinMode(PIN_MASTER_RELAY, OUTPUT);
   pinMode(PIN_HEAT_RELAY, OUTPUT);
-  pinMode(PIN_BLUE_LED, OUTPUT);
   // Temperature sensors:
   pinMode(PIN_MAIN_TEMP_SENSOR, INPUT);
   pinMode(PIN_AUX_TEMP_SENSOR, INPUT);
@@ -68,13 +73,13 @@ void setup() {
   attachInterrupt(PIN_MODE_BTN, ModeButton, RISING);
   attachInterrupt(PIN_TEMP_UP_BTN, TempUpButton, RISING);
   attachInterrupt(PIN_TEMP_DOWN_BTN, TempDownButton, RISING);
+  attachInterrupt(PIN_FAN_BTN, FanButton, RISING);
 
   // Serial port setup for LCD display:
   Serial1.begin(9600);
   delay(500);
   // Set backlight brightness (128 - 157)
-  Serial1.write(124);
-  Serial1.write(157);
+  SetBacklightBrightness(157);
   // Clear display:
   Serial1.write(254);
   Serial1.write(1);
@@ -99,6 +104,15 @@ void loop() {
     ReadSensors();
     UpdateDisplay();
   }
+
+  // Control backlight brightness:
+  if (millis() - lastButtonPressTime_ms > LCD_BACKLIGHT_TIMEOUT_MS)
+  {
+    if (backlightOn)
+      SetBacklightBrightness(0);
+  }
+  else if (!backlightOn)
+    SetBacklightBrightness(157);
 
   // Heater control:
   if (heatMode)
@@ -163,7 +177,6 @@ void loop() {
 void ReadSensors(void)
 {
   lastReadSensorsTime_ms = millis();
-  digitalWrite(PIN_BLUE_LED, HIGH);
 
   // analogRead returns 0-4095 for 0.0-3.3 volts.
   const int mainTemp_mv = analogRead(PIN_MAIN_TEMP_SENSOR) * 3300 / 4096;
@@ -182,6 +195,21 @@ void ReadSensors(void)
   //lightSensor = (lightSensorVolts - 0.595F) / (2.269F - 0.595F);
 }
 
+// brightness must be an int between 128 (off) and 157 (full on).
+// If brightness==0, backlight is turned off.
+void SetBacklightBrightness(int brightness)
+{
+  if (brightness == 0)
+    brightness = 128;
+  else if (brightness < 128 || brightness > 157)
+    return;
+
+  Serial1.write(124); // 124 = brightness command
+  Serial1.write(brightness); // brightness level (128-157)
+  delay(500);
+
+  backlightOn = (brightness != 128);
+}
 
 void UpdateDisplay(void)
 {
@@ -231,6 +259,7 @@ void ModeButton(void)
     UpdateDisplay();
   }
   timeOfLastInt = millis();
+  lastButtonPressTime_ms = millis();
 }
 
 
@@ -245,6 +274,7 @@ void TempUpButton(void)
     UpdateDisplay();
   }
   timeOfLastInt = millis();
+  lastButtonPressTime_ms = millis();
 }
 
 
@@ -259,4 +289,11 @@ void TempDownButton(void)
     UpdateDisplay();
   }
   timeOfLastInt = millis();
+  lastButtonPressTime_ms = millis();
+}
+
+
+void FanButton(void)
+{
+  lastButtonPressTime_ms = millis();
 }
