@@ -55,6 +55,12 @@ int mainTemp_degF = 0;
 int auxTemp_mDegC = 0;
 int auxTemp_degF = 0;
 
+// Register button debounce timer:
+Timer sampleButtonsTimer(5, sampleButtons); // (period in ms, callback when timer expires)
+
+// Button press input pins and callbacks (for debounce scheme):
+void (*buttonPressCallback[4])(void) = {&ModeButton, &TempUpButton, &TempDownButton, &FanButton};
+const int buttonPinMap[4] = {PIN_MODE_BTN, PIN_TEMP_UP_BTN, PIN_TEMP_DOWN_BTN, PIN_FAN_BTN};
 
 void setup() {
   // Set pin directions:
@@ -69,12 +75,6 @@ void setup() {
   // Temperature sensors:
   pinMode(PIN_MAIN_TEMP_SENSOR, INPUT);
   pinMode(PIN_AUX_TEMP_SENSOR, INPUT);
-
-  // Pin change interrupts for the switches:
-  attachInterrupt(PIN_MODE_BTN, ModeButton, RISING);
-  attachInterrupt(PIN_TEMP_UP_BTN, TempUpButton, RISING);
-  attachInterrupt(PIN_TEMP_DOWN_BTN, TempDownButton, RISING);
-  attachInterrupt(PIN_FAN_BTN, FanButton, RISING);
 
   // Serial port setup for LCD display:
   Serial1.begin(9600);
@@ -91,6 +91,9 @@ void setup() {
 
   // Master relay on:
   digitalWrite(PIN_MASTER_RELAY, HIGH);
+
+  // start the button sampling timer:
+  sampleButtonsTimer.start();
 }
 
 
@@ -178,6 +181,24 @@ void loop() {
   }
 }
 
+// timer callback for button debounce:
+void sampleButtons(void)
+{
+  // button debounce states:
+  static uint16_t States[4] = {0};
+  for(int i=0 ; i<4 ; i++)
+  {
+    // Simple debounce scheme (http://www.eng.utah.edu/~cs5780/debouncing.pdf):
+    const uint16_t rawBtnPressed = digitalRead(buttonPinMap[i]) ? 1 : 0;
+    States[i] = (States[i]<<1) | !rawBtnPressed | 0xe000;
+    if(States[i] == 0xf000)
+    {
+      buttonPressCallback[i]();
+      lastButtonPressTime_ms = millis();
+    }
+  }
+}
+
 
 void ReadSensors(void)
 {
@@ -260,48 +281,32 @@ int SetTemperature(String command)
 
 void ModeButton(void)
 {
-  static unsigned long timeOfLastInt = 0;
-  if (millis() - timeOfLastInt > 250)
-  {
-    heatMode = !heatMode;
-    shouldUpdateDisplay = true;
-  }
-  timeOfLastInt = millis();
-  lastButtonPressTime_ms = millis();
+  heatMode = !heatMode;
+  shouldUpdateDisplay = true;
 }
 
 
 void TempUpButton(void)
 {
-  static unsigned long timeOfLastInt = 0;
-  if (millis() - timeOfLastInt > 250)
+  if (setPoint_degF < 90)
   {
-    if (setPoint_degF < 90)
-        ++setPoint_degF;
-
+    ++setPoint_degF;
     shouldUpdateDisplay = true;
   }
-  timeOfLastInt = millis();
-  lastButtonPressTime_ms = millis();
 }
 
 
 void TempDownButton(void)
 {
-  static unsigned long timeOfLastInt = 0;
-  if (millis() - timeOfLastInt > 250)
+  if (setPoint_degF > 50)
   {
-    if (setPoint_degF > 50)
-        --setPoint_degF;
-
+    --setPoint_degF;
     shouldUpdateDisplay = true;
   }
-  timeOfLastInt = millis();
-  lastButtonPressTime_ms = millis();
 }
 
 
 void FanButton(void)
 {
-  lastButtonPressTime_ms = millis();
+  // nothing to do for this button
 }
